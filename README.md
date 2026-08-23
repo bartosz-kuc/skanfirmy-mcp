@@ -74,6 +74,19 @@ For agents/crawlers that just want a URL:
 
 Add `?format=json` for JSON. Full docs: [skanfirmy.pl/llms.txt](https://skanfirmy.pl/llms.txt).
 
+## Claude Agent Skill
+
+Prefer a drop-in [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills)?
+[`skill/`](skill/) holds **`verify-polish-company`** — a single `SKILL.md` that
+teaches Claude Code, the Claude apps or the Agent SDK when and how to call the
+endpoints above (no key, nothing to run beyond ordinary HTTP):
+
+```bash
+cp -R skill ~/.claude/skills/verify-polish-company
+```
+
+See [`skill/README.md`](skill/README.md) for details.
+
 ## Data sources
 
 VAT Register / Biała Lista (Ministry of Finance), KRS (Ministry of Justice),
