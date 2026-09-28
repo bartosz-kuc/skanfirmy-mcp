@@ -3,10 +3,9 @@ name: verify-polish-company
 description: >-
   Verify Polish companies and contractors by NIP, KRS, or REGON; check VAT
   status and bank accounts against the Ministry of Finance White List
-  (Biała Lista); look up REGON/GUS registry data (including sole traders / JDG);
-  read KRS registry data; and validate EU VAT numbers via VIES. Uses
-  skanfirmy.pl's free, public API — no API key, no registration, no rate-limit
-  signup. Use whenever the user needs to check a Polish business, a tax ID
+  (Biała Lista); look up REGON/GUS registry data; read KRS registry data; and
+  validate EU VAT numbers via VIES. Uses skanfirmy.pl's free, public API — no
+  API key and no registration (per-IP rate limits apply). Use whenever the user needs to check a Polish business, a tax ID
   (NIP), a KRS number, a REGON, a counterparty's VAT status or bank account,
   or an EU VAT number (VIES).
 license: MIT
@@ -18,8 +17,17 @@ This skill verifies Polish businesses straight from official government
 registers (Ministry of Finance, Ministry of Justice / KRS, Statistics Poland /
 GUS, and the European Commission / VIES) through **skanfirmy.pl**, a free public
 API. Every endpoint is a plain `GET` that returns JSON when you add
-`?format=json`. **No API key, no account, no daily quota.** Be reasonable:
-issue user-driven single lookups, not mass scraping.
+`?format=json`. **No API key, no account.** The service is meant for single,
+user-driven lookups, not bulk data harvesting: REST allows at most 20 requests
+per 10 seconds from one IP address (HTTP 429 for 10 seconds above that), the MCP
+server 60 per 10 seconds.
+
+**Sole traders and other natural persons (JDG, civil partnerships) get minimised
+data** (GDPR): name, NIP, VAT status, town and the *number* of White List
+accounts — no REGON, no address, no registration date, no PKD and no list of
+account numbers. To check one specific account of such a counterparty, use
+`POST /rachunek` (or the MCP tool `sprawdz_rachunek`). Companies (entities with a
+KRS number) get full data.
 
 ## When to use it
 
@@ -30,8 +38,8 @@ Reach for this skill when the user asks to:
   (needed for Polish "due diligence" on payments over 15 000 PLN);
 - pull a company's **KRS** registry data (legal form, PKD, share capital,
   address, representation) by NIP or KRS number;
-- look up **REGON** and official name/address by NIP — **including sole traders
-  (JDG)** that are not in the KRS;
+- look up **REGON** and official name/address of a company by NIP (for sole
+  traders only the name, legal form, town and activity status);
 - validate an **EU VAT number** (any member state) via **VIES**;
 - check **many NIPs at once**.
 
@@ -47,9 +55,10 @@ crawlable HTML with embedded JSON-LD.
 
 | Endpoint | What it returns |
 |---|---|
-| `GET https://skanfirmy.pl/nip/{nip}` | VAT status + White List (accounts) + KRS data + REGON, combined in one response |
+| `GET https://skanfirmy.pl/nip/{nip}` | VAT status + White List (accounts) + KRS data + REGON, combined in one response (minimised for natural persons, see above) |
 | `GET https://skanfirmy.pl/nips/{list}` | The same for **up to 30** comma-separated NIPs in one call (no KRS join) |
-| `GET https://skanfirmy.pl/regon/{nip}` | REGON registry data: REGON number, official name, legal form, address; covers sole traders (JDG) |
+| `GET https://skanfirmy.pl/regon/{nip}` | REGON registry data: REGON number, official name, legal form, address (sole traders: name, form, town, activity status only) |
+| `POST https://skanfirmy.pl/rachunek` | Is this bank account on the White List for this NIP? JSON body `{"nip": "…", "nrb": "…"}`; returns the Ministry's `accountAssigned` (`"TAK"`/`"NIE"`) and `requestId` |
 | `GET https://skanfirmy.pl/vies/{country}/{number}` | Whether an EU VAT number is valid, plus the registered name/address |
 
 Examples:
@@ -58,7 +67,7 @@ Examples:
 # Full check by NIP (VAT status + White List + KRS + REGON)
 curl "https://skanfirmy.pl/nip/5260250995?format=json"
 
-# REGON / GUS data only (works for sole traders too)
+# REGON / GUS data only
 curl "https://skanfirmy.pl/regon/5260250995?format=json"
 
 # EU VAT number (VIES) — country code + number without the prefix
@@ -68,18 +77,19 @@ curl "https://skanfirmy.pl/vies/IE/6388047V?format=json"
 curl "https://skanfirmy.pl/nips/5252344078,5260251049,7740001454?format=json"
 ```
 
-`/regon/{nip}` returns a `dane` object with `regon`, `nazwa` (official name),
-`typ` (`P` = legal person, `F` = natural person incl. JDG, `LP`/`LF` = local
-units), and address fields (`wojewodztwo`, `powiat`, `gmina`, `miejscowosc`,
-`kodPocztowy`, `ulica`, `nrNieruchomosci`, `nrLokalu`). For sole traders
-(`typ: "F"`) only name/REGON/type are returned — address fields stay empty
-(a GUS limitation, not skanfirmy's).
+`/regon/{nip}` returns a `dane` object. For a company: `regon`, `nazwa` (official
+name), `typ` (`P` = legal person, `LP` = local unit) and address fields
+(`wojewodztwo`, `powiat`, `gmina`, `miejscowosc`, `kodPocztowy`, `ulica`,
+`nrNieruchomosci`, `nrLokalu`). For a natural person (`typ` `F`/`LF`, or a civil
+partnership) only `nip`, `nazwa`, `typ`, `forma`, `miejscowosc` and `status`
+(`active`/`ended`), with a `privacy` object that links to the official GUS search.
 
 ## Choosing the right endpoint
 
 - Need VAT status **and** KRS in one shot → `/nip/{nip}`.
-- Only official name/address/REGON, or the entity is a **sole trader** →
-  `/regon/{nip}` (the White List / KRS do not cover JDG the same way).
+- Only official name/address/REGON of a company → `/regon/{nip}`.
+- A **specific bank account** of a counterparty (also a sole trader) →
+  `POST /rachunek`.
 - A **foreign** EU counterparty's VAT number → `/vies/{country}/{number}`.
 - A **list** of Polish counterparties → `/nips/{list}` (then, if you need KRS
   for a specific hit, re-query it with `/nip/{nip}`).
@@ -88,6 +98,12 @@ units), and address fields (`wojewodztwo`, `powiat`, `gmina`, `miejscowosc`,
 
 - Unknown entity → `404`. NIP with an invalid checksum → `400`. Handle both;
   do not assume every NIP has an entry.
+- Too many requests → `429` (wait 10 seconds). The Ministry of Finance daily
+  limit for the service exhausted → `503` with `Retry-After`.
+- Some numbers are **restricted from presentation** (a data-protection
+  procedure): the response is `200` with `restricted: true`, a fixed sentence and
+  a link to the Ministry of Finance search, and no data. Tell the user to check
+  the number there; do not treat it as "not registered".
 - When comparing literal government values, key logic off the **original**
   Polish literals (VAT status `"Czynny"`/`"Zwolniony"`, account match
   `"TAK"`/`"NIE"`), not a translated label.
@@ -98,7 +114,7 @@ If you speak the Model Context Protocol, connect to the server instead of
 calling REST by hand:
 
 `POST https://skanfirmy.pl/mcp` — stateless Streamable HTTP, JSON-RPC 2.0,
-no key. Tools: `sprawdz_nip`, `sprawdz_lista_nip`, `sprawdz_regon`,
+no key, 60 requests per 10 seconds from one IP address. Tools: `sprawdz_nip`, `sprawdz_lista_nip`, `sprawdz_regon`,
 `sprawdz_vies`, `sprawdz_rachunek`, `generuj_mikrorachunek`, `szukaj_pkd`,
 `oblicz_odsetki`, `szukaj_katalog_api`. A model-readable endpoint map lives at
 `https://skanfirmy.pl/llms.txt`.

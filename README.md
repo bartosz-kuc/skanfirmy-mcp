@@ -2,12 +2,14 @@
 
 A free, stateless **MCP (Model Context Protocol) server** that lets AI agents
 verify **Polish companies** and validate EU VAT numbers directly from official
-government registers — **no key, no registration, no limits** beyond the source
-registries' own.
+government registers. No key and no registration for the lookups; per-IP rate
+limits apply (see [Limits and personal data](#limits-and-personal-data)).
 
 - **Endpoint:** `https://skanfirmy.pl/mcp` (JSON-RPC 2.0 over Streamable HTTP)
-- **9 tools** combining the VAT Register (Ministry of Finance), KRS (Ministry of
-  Justice), REGON (Statistics Poland / GUS) and VIES (European Commission).
+- **14 tools**: 9 lookups and calculators combining the VAT Register (Ministry of
+  Finance), KRS (Ministry of Justice), REGON (Statistics Poland / GUS) and VIES
+  (European Commission), plus 5 tools for the optional change monitoring, which
+  need an API key.
 - Also usable as plain REST for crawlers/agents that can't speak MCP.
 
 Made by **[Bartosz Kuć](https://skanfirmy.pl)** — the same person behind
@@ -20,13 +22,39 @@ Made by **[Bartosz Kuć](https://skanfirmy.pl)** — the same person behind
 |---|---|
 | `sprawdz_nip` | VAT status (Biała Lista) + KRS data for a company by NIP |
 | `sprawdz_lista_nip` | Bulk lookup of up to 30 NIPs in one call (MF VAT Register) |
-| `sprawdz_regon` | REGON registry data (GUS) by NIP — incl. sole traders not in KRS |
+| `sprawdz_regon` | REGON registry data (GUS) by NIP; for sole traders and other natural persons only name, legal form, entity type, town and activity status |
 | `sprawdz_vies` | Validate an EU VAT number via VIES (European Commission) |
 | `sprawdz_rachunek` | Is a bank account on the VAT White List for a given NIP |
-| `generuj_mikrorachunek` | Individual tax micro-account (PIT/CIT/VAT) from NIP/PESEL |
+| `generuj_mikrorachunek` | Individual tax micro-account (PIT/CIT/VAT) from a NIP; the formula for a PESEL is in the tool description, to compute locally |
 | `szukaj_pkd` | Search the PKD 2025 business-activity classification |
 | `oblicz_odsetki` | Statutory / commercial (B2B) late-payment interest calculator |
 | `szukaj_katalog_api` | Search [otwarteAPI.pl](https://otwarteapi.pl) — a catalog of other public PL/EU APIs |
+
+Monitoring tools (need a skanfirmy API key, which you get after confirming a
+sign-up at [skanfirmy.pl/monitoring](https://skanfirmy.pl/monitoring)):
+`observe_nip`, `unobserve_nip`, `list_observations`, `changes_since`,
+`set_webhook`.
+
+## Limits and personal data
+
+- **Rate limits per IP address.** MCP: at most 60 requests per 10 seconds, then
+  HTTP 429 with a JSON-RPC error (`error.data.contact`) for 10 seconds. REST
+  endpoints: at most 20 requests per 10 seconds, then HTTP 429 for 10 seconds.
+  The service is meant for single lookups started by users or their agents,
+  not for bulk data harvesting.
+- **Source limits.** The Ministry of Finance White List API has its own daily
+  limits (search: 100 queries a day, up to 30 NIPs each), shared by all users
+  of the service. When they run out, lookups answer HTTP 503 until the next day.
+- **Sole traders and other natural persons** (entities without a KRS number, and
+  civil partnerships) get minimised data (GDPR): name, NIP, VAT status, town
+  and the *number* of White List accounts. No REGON number, address,
+  registration date, PKD codes or list of account numbers. To check one
+  specific account, use `sprawdz_rachunek` (REST: `POST /rachunek`).
+- **Numbers restricted from presentation.** Data for some numbers is not
+  presented (a data-protection procedure). The answer is then `restricted: true`
+  with a fixed sentence and a link to the Ministry of Finance search, with no
+  data and no fields about validity, VAT status or presence in the register.
+  Send the user to the official search.
 
 ## Connect
 
@@ -71,8 +99,10 @@ For agents/crawlers that just want a URL:
 - `GET https://skanfirmy.pl/nips/{comma,separated,nips}` — bulk (≤30)
 - `GET https://skanfirmy.pl/regon/{nip}` — REGON registry data
 - `GET https://skanfirmy.pl/vies/{country}/{number}` — EU VAT (VIES)
+- `POST https://skanfirmy.pl/rachunek` — is one bank account on the White List for a NIP
 
-Add `?format=json` for JSON. Full docs: [skanfirmy.pl/llms.txt](https://skanfirmy.pl/llms.txt).
+Add `?format=json` for JSON. Full docs: [skanfirmy.pl/llms.txt](https://skanfirmy.pl/llms.txt),
+OpenAPI: [skanfirmy.pl/openapi.yaml](https://skanfirmy.pl/openapi.yaml).
 
 ## Claude Agent Skill
 
@@ -91,8 +121,8 @@ See [`skill/README.md`](skill/README.md) for details.
 
 VAT Register / Biała Lista (Ministry of Finance), KRS (Ministry of Justice),
 REGON / BIR (Statistics Poland — GUS), VIES (European Commission). Independent
-project — not affiliated with any of them. Nothing is persisted; responses are
-transiently CDN-cached (max 24h), `POST /mcp` isn't cached at all.
+project — not affiliated with any of them. What the service stores and for how
+long is described in its [privacy policy](https://skanfirmy.pl/privacy).
 
 ## Author
 

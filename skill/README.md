@@ -10,13 +10,15 @@ It covers:
 - **VAT status & bank-account** checks on the Ministry of Finance White List
   (Biała Lista) by NIP,
 - **KRS** registry data (legal form, PKD, capital, address, representation),
-- **REGON / GUS** lookup by NIP — including sole traders (JDG),
+- **REGON / GUS** lookup by NIP (for sole traders and other natural persons
+  only name, legal form, entity type, town and activity status),
 - **VIES** validation of EU VAT numbers,
 - **bulk** checks of up to 30 NIPs in one call,
 - and the equivalent **MCP** tools at `https://skanfirmy.pl/mcp`.
 
 No API key, no account, no signup — the skill is just instructions; nothing is
-installed or run beyond ordinary HTTP calls to the public endpoints.
+installed or run beyond ordinary HTTP calls to the public endpoints. Per-IP rate
+limits apply: 20 requests per 10 seconds for REST, 60 for MCP.
 
 ## Install
 
